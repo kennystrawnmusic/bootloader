@@ -7,11 +7,8 @@ use serde::{Deserialize, Serialize};
 #[serde(default)]
 #[non_exhaustive]
 pub struct BootConfig {
-    /// Configuration for the frame buffer setup on physical hardware.
-    pub frame_buffer_physical: FrameBuffer,
-
-    /// Configuration for the frame buffer setup in a virtual machine
-    pub frame_buffer_virtual: FrameBuffer,
+    /// Configuration for the frame buffer setup.
+    pub frame_buffer: FrameBuffer,
 
     /// The minimum log level that is printed to the screen during boot.
     ///
@@ -35,8 +32,7 @@ pub struct BootConfig {
 impl Default for BootConfig {
     fn default() -> Self {
         Self {
-            frame_buffer_virtual: Default::default(),
-            frame_buffer_physical: Default::default(),
+            frame_buffer: Default::default(),
             log_level: Default::default(),
             frame_buffer_logging: true,
             serial_logging: true,

@@ -13,7 +13,6 @@ use core::{
     ops::{Deref, DerefMut},
     ptr, slice,
 };
-use raw_cpuid::{CpuId, Hypervisor};
 use uefi::{
     prelude::{entry, Boot, Handle, Status, SystemTable},
     proto::{
@@ -98,21 +97,13 @@ fn main_inner(image: Handle, mut st: SystemTable<Boot>) -> Status {
     };
 
     #[allow(deprecated)]
-    if config
-        .frame_buffer_physical
-        .minimum_framebuffer_height
-        .is_none()
-    {
-        config.frame_buffer_physical.minimum_framebuffer_height =
+    if config.frame_buffer.minimum_framebuffer_height.is_none() {
+        config.frame_buffer.minimum_framebuffer_height =
             kernel.config.frame_buffer.minimum_framebuffer_height;
     }
     #[allow(deprecated)]
-    if config
-        .frame_buffer_physical
-        .minimum_framebuffer_width
-        .is_none()
-    {
-        config.frame_buffer_physical.minimum_framebuffer_width =
+    if config.frame_buffer.minimum_framebuffer_width.is_none() {
+        config.frame_buffer.minimum_framebuffer_width =
             kernel.config.frame_buffer.minimum_framebuffer_width;
     }
     let framebuffer = init_logger(image, &st, &config);
@@ -175,7 +166,7 @@ fn main_inner(image: Handle, mut st: SystemTable<Boot>) -> Status {
         },
         ramdisk_addr,
         ramdisk_len,
-        rt_table_addr: Some(system_table.get_current_system_table_addr()),
+        rt_table_addr: Some(&system_table as *const _ as u64),
     };
 
     bootloader_x86_64_common::load_and_switch_to_kernel(
@@ -482,82 +473,25 @@ fn init_logger(
 
     let mode = {
         let modes = gop.modes();
-
-        if let Some(hypervisor) = CpuId::new().get_hypervisor_info() {
-            if let Hypervisor::Xen = hypervisor.identify() {
-                // Use same rules as real hardware since Xen uses the whole screen
-                match (
-                    config
-                        .frame_buffer_physical
-                        .minimum_framebuffer_height
-                        .map(|v| usize::try_from(v).unwrap()),
-                    config
-                        .frame_buffer_physical
-                        .minimum_framebuffer_width
-                        .map(|v| usize::try_from(v).unwrap()),
-                ) {
-                    (Some(height), Some(width)) => modes
-                        .filter(|m| {
-                            let res = m.info().resolution();
-                            res.1 >= height && res.0 >= width
-                        })
-                        .last(),
-                    (Some(height), None) => {
-                        modes.filter(|m| m.info().resolution().1 >= height).last()
-                    }
-                    (None, Some(width)) => {
-                        modes.filter(|m| m.info().resolution().0 >= width).last()
-                    }
-                    _ => None,
-                }
-            } else {
-                match (
-                    config
-                        .frame_buffer_virtual
-                        .minimum_framebuffer_height
-                        .map(|v| usize::try_from(v).unwrap()),
-                    config
-                        .frame_buffer_virtual
-                        .minimum_framebuffer_width
-                        .map(|v| usize::try_from(v).unwrap()),
-                ) {
-                    (Some(height), Some(width)) => modes
-                        .filter(|m| {
-                            let res = m.info().resolution();
-                            res.1 >= height && res.0 >= width
-                        })
-                        .last(),
-                    (Some(height), None) => {
-                        modes.filter(|m| m.info().resolution().1 >= height).last()
-                    }
-                    (None, Some(width)) => {
-                        modes.filter(|m| m.info().resolution().0 >= width).last()
-                    }
-                    _ => None,
-                }
-            }
-        } else {
-            // On real hardware; set rules accordingly
-            match (
-                config
-                    .frame_buffer_physical
-                    .minimum_framebuffer_height
-                    .map(|v| usize::try_from(v).unwrap()),
-                config
-                    .frame_buffer_physical
-                    .minimum_framebuffer_width
-                    .map(|v| usize::try_from(v).unwrap()),
-            ) {
-                (Some(height), Some(width)) => modes
-                    .filter(|m| {
-                        let res = m.info().resolution();
-                        res.1 >= height && res.0 >= width
-                    })
-                    .last(),
-                (Some(height), None) => modes.filter(|m| m.info().resolution().1 >= height).last(),
-                (None, Some(width)) => modes.filter(|m| m.info().resolution().0 >= width).last(),
-                _ => None,
-            }
+        match (
+            config
+                .frame_buffer
+                .minimum_framebuffer_height
+                .map(|v| usize::try_from(v).unwrap()),
+            config
+                .frame_buffer
+                .minimum_framebuffer_width
+                .map(|v| usize::try_from(v).unwrap()),
+        ) {
+            (Some(height), Some(width)) => modes
+                .filter(|m| {
+                    let res = m.info().resolution();
+                    res.1 >= height && res.0 >= width
+                })
+                .last(),
+            (Some(height), None) => modes.filter(|m| m.info().resolution().1 >= height).last(),
+            (None, Some(width)) => modes.filter(|m| m.info().resolution().0 >= width).last(),
+            _ => None,
         }
     };
     if let Some(mode) = mode {
